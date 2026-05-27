@@ -8,6 +8,8 @@ A [tldr](https://github.com/tldr-pages/tldr) client — when the official page e
 
 [![license](https://img.shields.io/github/license/11010tianyi/tlrc?color=b4befe&labelColor=363a4f)](/LICENSE)
 
+[中文文档](README_zh.md)
+
 </div>
 
 ## How It Works
@@ -215,6 +217,10 @@ bullet.color = "green"
 example.color = "red"
 placeholder.color = "default"
 ```
+
+## Python Version
+
+This project was rewritten from a Python CLI ([aitldr-cli](https://github.com/11010tianyi/aitldr-cli)). For a detailed feature-by-feature migration comparison, see [docs/PYTHON_MIGRATION.md](docs/PYTHON_MIGRATION.md).
 
 ## License
 

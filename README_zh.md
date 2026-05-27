@@ -8,6 +8,8 @@
 
 [![license](https://img.shields.io/github/license/11010tianyi/tlrc?color=b4befe&labelColor=363a4f)](/LICENSE)
 
+[English](README.md)
+
 </div>
 
 ## 工作原理
@@ -215,6 +217,10 @@ bullet.color = "green"
 example.color = "red"
 placeholder.color = "default"
 ```
+
+## Python 版本
+
+本项目从 Python CLI（[aitldr-cli](https://github.com/11010tianyi/aitldr-cli)）重写而来。详细的功能迁移对比见 [docs/PYTHON_MIGRATION.md](docs/PYTHON_MIGRATION.md)。
 
 ## 许可证
 
