@@ -146,6 +146,14 @@ pub fn find_bio_format(fmt: &str) -> Result<Option<(String, String)>, CacheError
     Ok(None)
 }
 
+/// Remove all cached bio pages so they can be re-downloaded
+pub fn clean_bio_pages() {
+    if let Some(home) = dirs::home_dir() {
+        let _ = std::fs::remove_dir_all(home.join(".aitldr/bio-command"));
+        let _ = std::fs::remove_dir_all(home.join(".aitldr/bio-format"));
+    }
+}
+
 /// Download bioinformatics community pages from GitHub
 pub fn download_bio_pages() -> Result<(), CacheError> {
     let bio_cmd_dir = get_bio_command_dir()?;

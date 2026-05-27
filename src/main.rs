@@ -200,7 +200,14 @@ async fn run(cli: Cli) -> Result<()> {
 
     if cli.update {
         // update() should never use languages from --language.
-        return cache.update(&cfg.cache.mirror, &mut cfg.cache.languages);
+        cache.update(&cfg.cache.mirror, &mut cfg.cache.languages)?;
+        // Also refresh bioinformatics community pages
+        info!("Updating bioinformatics community pages...");
+        aitldr_cache::clean_bio_pages();
+        if let Err(e) = aitldr_cache::download_bio_pages() {
+            warn!("Failed to update bio pages: {e}");
+        }
+        return Ok(());
     }
 
     let mut update_later = false;
