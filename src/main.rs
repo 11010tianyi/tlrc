@@ -4,6 +4,8 @@ mod config;
 mod error;
 mod output;
 mod util;
+mod ai;
+mod ai;
 
 use std::process::ExitCode;
 
@@ -17,6 +19,9 @@ use crate::config::{Config, OptionStyle, OutputMode};
 use crate::error::{Error, Result};
 use crate::output::PageRenderer;
 use crate::util::{Logger, init_color};
+use crate::ai::fallback_generate;
+use crate::ai::fallback_generate;
+use tokio;
 
 const DEFAULT_PLATFORM: &str = if cfg!(target_os = "linux") {
     "linux"
@@ -36,12 +41,12 @@ const DEFAULT_PLATFORM: &str = if cfg!(target_os = "linux") {
     "common"
 };
 
-fn main() -> ExitCode {
+async async fn main() -> ExitCode {
     let cli = Cli::parse();
     init_color(cli.color);
     Logger::init(cli.quiet, cli.verbose);
 
-    match run(cli) {
+    match tokio::runtime::Runtime::new().unwrap().block_on(run(cli)) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => e.exit_code(),
     }
@@ -83,7 +88,7 @@ fn include_cli_in_config(cfg: &mut Config, cli: &Cli) {
     }
 }
 
-fn run(cli: Cli) -> Result<()> {
+async fn run(cli: Cli) -> Result<()> {
     if cli.config_path {
         return Config::print_path();
     }
@@ -184,6 +189,17 @@ fn run(cli: Cli) -> Result<()> {
         }
 
         if page_paths.is_empty() {
+            // Try AI fallback if not offline
+            if !cli.offline {
+                info!("Page not found, trying AI generation...");
+                if let Some(ai_content) = fallback_generate(&page_name).await.map_err(|e| Error::new(&format!("AI error: {}", e)))? {
+                    let temp_path = std::env::temp_dir().join(format!("tldr_ai_{}.md", page_name));
+                    std::fs::write(&temp_path, ai_content)?;
+                    PageRenderer::print_cache_result(&[temp_path], &cfg)?;
+                    return Ok(());
+                }
+            }
+
             let e = Error::new("page not found.");
             return if languages_are_from_cli {
                 Err(e.describe(Error::TRY_NO_EXPLICIT_LANGUAGE))
