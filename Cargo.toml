@@ -4,13 +4,12 @@ resolver = "2"
 
 [package]
 name = "tlrc"
-version = "1.13.1"
-description = "Official tldr client written in Rust"
-authors = ["Lena Pastwa <lena@lnps.me>"]
+version = "0.1.0"
+description = "tldr client with AI fallback for missing pages"
+authors = ["Lena Pastwa <lena@lnps.me>", "11010tianyi"]
 categories = ["command-line-utilities"]
-keywords = ["tldr"]
-repository = "https://github.com/tldr-pages/tlrc"
-documentation = "https://tldr.sh/tlrc"
+keywords = ["tldr", "ai"]
+repository = "https://github.com/11010tianyi/tlrc"
 license = "MIT"
 edition = "2024"
 rust-version = "1.88"
