@@ -146,6 +146,23 @@ fn handle_ai_status() -> Result<()> {
     Ok(())
 }
 
+/// Print explanation for a command, using cache unless skip_cache is true
+async fn print_explanation(command: &str, ai_config: &aitldr_ai::config::AiConfig, skip_cache: bool) {
+    if !skip_cache {
+        if let Ok(Some(cached)) = crate::ai::check_explain_cache(command) {
+            println!("\n{cached}");
+            return;
+        }
+    }
+    match aitldr_ai::generate_command_explanation(command, ai_config).await {
+        Ok(explanation) => {
+            crate::ai::save_explain_cache(command, &explanation);
+            println!("\n{explanation}");
+        }
+        Err(e) => warn!("Failed to generate explanation: {e}"),
+    }
+}
+
 async fn run(cli: Cli) -> Result<()> {
     // Handle AI-specific commands first
     if cli.init {
@@ -254,14 +271,12 @@ async fn run(cli: Cli) -> Result<()> {
         // Natural language mode: detect Chinese or natural language patterns
         if is_natural_language(&raw_query) {
             info!("Detected natural language query, generating command...");
+            let skip_explain_cache = cli.refresh;
             // Check NL cache first
             if let Some(cached_cmd) = crate::ai::check_nl_cache(&raw_query)? {
                 println!("{}", cached_cmd.bold());
                 if explain {
-                    match aitldr_ai::generate_command_explanation(&cached_cmd, &ai_config).await {
-                        Ok(explanation) => println!("\n{explanation}"),
-                        Err(e) => warn!("Failed to generate explanation: {e}"),
-                    }
+                    print_explanation(&cached_cmd, &ai_config, skip_explain_cache).await;
                 }
                 if aitldr_risk::is_destructive(&cached_cmd) {
                     eprintln!("\n{} {}", "WARNING:".yellow().bold(), "Destructive command! This operation may cause irreversible data loss.".yellow());
@@ -275,10 +290,7 @@ async fn run(cli: Cli) -> Result<()> {
                     crate::ai::save_nl_cache(&raw_query, &command);
                     println!("{}", command.bold());
                     if explain {
-                        match aitldr_ai::generate_command_explanation(&command, &ai_config).await {
-                            Ok(explanation) => println!("\n{explanation}"),
-                            Err(e) => warn!("Failed to generate explanation: {e}"),
-                        }
+                        print_explanation(&command, &ai_config, skip_explain_cache).await;
                     }
                     if aitldr_risk::is_destructive(&command) {
                         eprintln!("\n{} {}", "WARNING:".yellow().bold(), "Destructive command! This operation may cause irreversible data loss.".yellow());

@@ -46,6 +46,31 @@ pub fn delete_ai_cache(command: &str) {
     if let Err(e) = cache_module::delete_page(command) {
         log::warn!("Failed to delete AI cache: {e}");
     }
+    if let Err(e) = cache_module::delete_explain_page(command) {
+        log::warn!("Failed to delete explain cache: {e}");
+    }
+}
+
+/// Check explanation cache for a command
+pub fn check_explain_cache(command: &str) -> Result<Option<String>> {
+    match cache_module::load_explain_page(command) {
+        Ok(Some(explanation)) => {
+            log::info!("Using cached explanation for '{command}'");
+            Ok(Some(explanation))
+        }
+        Ok(None) => Ok(None),
+        Err(e) => {
+            log::warn!("Failed to read explain cache: {e}");
+            Ok(None)
+        }
+    }
+}
+
+/// Save explanation to cache
+pub fn save_explain_cache(command: &str, explanation: &str) {
+    if let Err(e) = cache_module::save_explain_page(command, explanation) {
+        log::warn!("Failed to save explain cache: {e}");
+    }
 }
 
 /// Step 3: AI generation with command_exists check (equivalent to Python's generate_page)

@@ -24,6 +24,13 @@ fn get_nl_cache_dir() -> Result<PathBuf, CacheError> {
     Ok(dir)
 }
 
+fn get_explain_cache_dir() -> Result<PathBuf, CacheError> {
+    let home = home_dir().ok_or(CacheError::NoHome)?;
+    let dir = home.join(".aitldr/explain");
+    std::fs::create_dir_all(&dir)?;
+    Ok(dir)
+}
+
 fn sanitize_filename(s: &str) -> String {
     s.chars()
         .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
@@ -61,4 +68,23 @@ pub fn load_nl_page(query: &str) -> Result<Option<String>, CacheError> {
     let filename = format!("{}.txt", sanitize_filename(query));
     let path = dir.join(&filename);
     Ok(path.exists().then(|| std::fs::read_to_string(&path).ok()).flatten())
+}
+
+pub fn save_explain_page(cmd: &str, explanation: &str) -> Result<(), CacheError> {
+    let path = get_explain_cache_dir()?.join(format!("{}.txt", sanitize_filename(cmd)));
+    std::fs::write(&path, explanation)?;
+    Ok(())
+}
+
+pub fn load_explain_page(cmd: &str) -> Result<Option<String>, CacheError> {
+    let path = get_explain_cache_dir()?.join(format!("{}.txt", sanitize_filename(cmd)));
+    Ok(path.exists().then(|| std::fs::read_to_string(&path).ok()).flatten())
+}
+
+pub fn delete_explain_page(cmd: &str) -> Result<(), CacheError> {
+    let path = get_explain_cache_dir()?.join(format!("{}.txt", sanitize_filename(cmd)));
+    if path.exists() {
+        std::fs::remove_file(&path)?;
+    }
+    Ok(())
 }
