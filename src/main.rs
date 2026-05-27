@@ -307,6 +307,19 @@ async fn run(cli: Cli) -> Result<()> {
             return Err(Error::new("could not generate a command from the given query."));
         }
 
+        // Download bio pages on first use if not cached
+        if !cli.offline {
+            let bio_dir = dirs::home_dir()
+                .map(|h| h.join(".aitldr/bio-command"))
+                .filter(|d| d.exists());
+            if bio_dir.is_none() {
+                info!("Downloading bioinformatics community pages...");
+                if let Err(e) = aitldr_cache::download_bio_pages() {
+                    info!("Bio pages download skipped: {e}");
+                }
+            }
+        }
+
         // --refresh: delete AI cache and regenerate
         if cli.refresh {
             crate::ai::delete_ai_cache(&page_name);
@@ -327,7 +340,20 @@ async fn run(cli: Cli) -> Result<()> {
         }
 
         if page_paths.is_empty() {
-            // Step 2: Check AI cache (same as Python: get_ai_page)
+            // Step 2: Check bioinformatics community pages (bio-command & bio-format)
+            if let Ok(Some((content, filename))) = aitldr_cache::find_bio_command(&page_name) {
+                eprintln!("{}", format!("[Bioinformatics Community Page: {filename}]").dim());
+                println!("{content}");
+                return Ok(());
+            }
+            // Also check bio-format (for format names like bam, vcf, fasta)
+            if let Ok(Some((content, filename))) = aitldr_cache::find_bio_format(&page_name) {
+                eprintln!("{}", format!("[Bioinformatics Format Page: {filename}]").dim());
+                println!("{content}");
+                return Ok(());
+            }
+
+            // Step 3: Check AI cache (same as Python: get_ai_page)
             if let Some(cached) = crate::ai::check_ai_cache(&page_name)? {
                 eprintln!("{}", "[AI Generated Page (cached)]".dim());
                 let temp_path =
