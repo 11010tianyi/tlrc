@@ -22,10 +22,11 @@ aitldr extends the official tlrc with AI-powered features:
 
 - **AI Page Generation** — When a tldr page doesn't exist in the official repository, aitldr generates one using AI (DeepSeek, OpenAI, or Ollama).
 - **Natural Language Queries** — Ask questions in plain language (including Chinese) and get the corresponding shell command.
-- **Smart Caching** — AI-generated pages and natural language results are cached locally to avoid wasting tokens.
+- **Smart Caching** — AI-generated pages, natural language results, and explanations are cached locally to avoid wasting tokens.
+- **Bioinformatics Community Pages** — Priority lookup from [bioinformatics-command](https://github.com/11010tianyi/bioinformatics-command) repository for 40+ bio tools and 25+ bio formats.
 - **Destructive Command Warnings** — Flags potentially dangerous commands (e.g., `rm -rf`).
-- **Command Explanation** — Get AI-generated explanations for any command with `--explain`.
-- **Offline AI Support** — AI generation and cached pages work in offline mode (skips command existence check).
+- **Command Explanation** — Get AI-generated explanations for any command with `--explain`, also cached.
+- **Offline AI Support** — `--offline` skips cache updates but AI generation and cached pages still work (skips command existence check).
 
 ## Installation
 
@@ -112,23 +113,23 @@ tldr "按MB大小排序文件" --explain
 tldr [OPTIONS] [PAGE]...
 
 Standard options:
-  -u, --update                    Update the cache
+  -u, --update                    Update the cache (also refreshes bio community pages)
   -l, --list                      List all pages in the current platform
   -a, --list-all                  List all pages
   -s, --search <KEYWORD>          Search for pages containing a keyword
   -p, --platform <PLATFORM>       Specify the platform (linux, osx, windows, etc.)
   -L, --language <LANGUAGE_CODE>  Specify the languages to use
-  -o, --offline                   Do not update the cache, even if it is stale
+  -o, --offline                   Do not update the cache (AI generation still works)
   -R, --raw                       Print pages in raw Markdown
   -r, --render <FILE>             Render the specified tldr page
   -q, --quiet                     Suppress status messages and warnings
 
 AI options:
-  -e, --explain                   Explain the generated command (natural language mode)
-  -r, --refresh                   Refresh AI-generated page (delete cache and regenerate)
+  -e, --explain                   Explain the command with AI (cached after first use)
+  -r, --refresh                   Refresh AI page + explanation cache and regenerate
   -m, --model <MODEL>             Override AI model provider (deepseek, openai, ollama)
-      --init                      Initialize aitldr configuration
-      --ai-status                 Show aitldr configuration status
+      --init                      Initialize aitldr configuration (~/.aitldr/config.toml)
+      --ai-status                 Show aitldr AI configuration status
 ```
 
 ## AI Features in Detail
@@ -138,8 +139,29 @@ AI options:
 When you run `tldr <command>`, aitldr follows this lookup order:
 
 1. **Official page** — Search the local tldr cache for the command.
-2. **AI cache** — Check `~/.aitldr/ai/` for a previously generated page.
-3. **AI generation** — Generate a new page using the configured AI provider, but only if the command exists on the system (prevents hallucination). In offline mode, the existence check is skipped.
+2. **Bio community page** — Check `~/.aitldr/bio-command/` for bioinformatics tool pages (e.g., `samtools`, `gatk`, `stringtie`).
+3. **Bio format page** — Check `~/.aitldr/bio-format/` for bioinformatics format pages (e.g., `bam`, `vcf`, `fasta`).
+4. **AI cache** — Check `~/.aitldr/ai/` for a previously generated page.
+5. **AI generation** — Generate a new page using the configured AI provider, but only if the command exists on the system (prevents hallucination). In offline mode, the existence check is skipped.
+
+Bio pages are downloaded automatically on first use from [bioinformatics-command](https://github.com/11010tianyi/bioinformatics-command). Use `--update` to refresh them.
+
+### Offline Mode
+
+`--offline` only skips cache updates — it does **not** disable AI features:
+
+- AI-generated pages from cache are still shown
+- AI generation still works (skips `command_exists` check, allowing pages for commands not installed locally)
+- Bio community pages are still used if already downloaded
+- Natural language queries still work
+
+```shell
+# Works offline: shows cached or AI-generated page
+tldr --offline stringtie
+
+# Works offline: natural language query with AI
+tldr --offline "查找大文件" --explain
+```
 
 ### Natural Language Mode
 
@@ -184,11 +206,19 @@ All AI-generated content is cached locally to avoid redundant API calls:
 
 - **Page cache** — `~/.aitldr/ai/{command}.md` for AI-generated tldr pages
 - **NL cache** — `~/.aitldr/nl/{query}.txt` for natural language query results
+- **Explanation cache** — `~/.aitldr/explain/{command}.txt` for AI-generated explanations
+- **Bio pages** — `~/.aitldr/bio-command/` and `~/.aitldr/bio-format/` for community bio pages
 
-Use `--refresh` to delete the cache for a specific command and regenerate it:
+Use `--refresh` to delete the page cache and explanation cache for a specific command, then regenerate:
 
 ```shell
 tldr --refresh tar
+```
+
+Use `--update` to refresh both official tldr pages and bio community pages:
+
+```shell
+tldr --update
 ```
 
 ### Destructive Command Warnings

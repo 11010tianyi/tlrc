@@ -3,10 +3,17 @@ use std::path::PathBuf;
 use clap::{ArgAction, ArgGroup, ColorChoice, Parser};
 
 const AFTER_HELP: &str = if cfg!(target_os = "windows") {
-    // Man pages are not available on Windows.
-    "See https://tldr.sh/tlrc for more information."
+    "Page lookup order: official cache → bio community pages → AI cache → AI generation.\n\
+     Use --offline to skip cache updates (AI generation still works).\n\
+     Use --explain to get AI explanations for natural language queries.\n\
+     Use --update to refresh both official and bio community pages.\n\
+     See https://tldr.sh/tlrc for more information."
 } else {
-    "See 'man tldr' or https://tldr.sh/tlrc for more information."
+    "Page lookup order: official cache → bio community pages → AI cache → AI generation.\n\
+     Use --offline to skip cache updates (AI generation still works).\n\
+     Use --explain to get AI explanations for natural language queries.\n\
+     Use --update to refresh both official and bio community pages.\n\
+     See 'man tldr' or https://tldr.sh/tlrc for more information."
 };
 
 #[derive(Parser)]
@@ -29,7 +36,7 @@ pub struct Cli {
     #[arg(group = "operations")]
     pub page: Vec<String>,
 
-    /// Update the cache.
+    /// Update the cache (also refreshes bio community pages).
     #[arg(short, long, group = "operations")]
     pub update: bool,
 
@@ -93,7 +100,7 @@ pub struct Cli {
     #[arg(long)]
     pub edit: bool,
 
-    /// Do not update the cache, even if it is stale.
+    /// Do not update the cache, even if it is stale (AI generation still works).
     #[arg(short, long)]
     pub offline: bool,
 
@@ -133,11 +140,11 @@ pub struct Cli {
     #[arg(short, long, action = ArgAction::Version)]
     version: (),
 
-    /// Explain the generated command (used with natural language queries).
+    /// Explain the generated command with AI (natural language queries or after command lookup).
     #[arg(short, long)]
     pub explain: bool,
 
-    /// Refresh AI-generated page (delete cache and regenerate).
+    /// Refresh AI-generated page (delete AI cache and explanation cache, then regenerate).
     #[arg(short, long)]
     pub refresh: bool,
 
@@ -145,11 +152,11 @@ pub struct Cli {
     #[arg(short, long)]
     pub model: Option<String>,
 
-    /// Initialize aitldr configuration.
+    /// Initialize aitldr configuration (~/.aitldr/config.toml).
     #[arg(long, group = "operations")]
     pub init: bool,
 
-    /// Show aitldr configuration status.
+    /// Show aitldr AI configuration status.
     #[arg(long, group = "operations")]
     pub ai_status: bool,
 }

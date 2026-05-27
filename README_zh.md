@@ -22,10 +22,11 @@ aitldr 在官方 tlrc 基础上增加了 AI 驱动的功能：
 
 - **AI 页面生成** — 当官方仓库中没有对应的 tldr 页面时，aitldr 会使用 AI（DeepSeek、OpenAI 或 Ollama）自动生成。
 - **自然语言查询** — 用自然语言（包括中文）提问，直接获取对应的 shell 命令。
-- **智能缓存** — AI 生成的页面和自然语言查询结果会缓存在本地，避免重复消耗 token。
+- **智能缓存** — AI 生成的页面、自然语言查询结果和命令解释都会缓存在本地，避免重复消耗 token。
+- **生信社区页面** — 优先从 [bioinformatics-command](https://github.com/11010tianyi/bioinformatics-command) 仓库查询 40+ 生信工具和 25+ 生信格式页面。
 - **危险命令警告** — 自动检测潜在的危险命令（如 `rm -rf`）并显示警告。
-- **命令解释** — 使用 `--explain` 获取 AI 生成的命令详细解释。
-- **离线 AI 支持** — 离线模式下仍可使用 AI 生成和缓存页面（跳过命令存在性检查）。
+- **命令解释** — 使用 `--explain` 获取 AI 生成的命令详细解释，解释结果也会缓存。
+- **离线 AI 支持** — `--offline` 只跳过缓存更新，AI 生成和缓存页面仍然可用（跳过命令存在性检查）。
 
 ## 安装
 
@@ -112,23 +113,23 @@ tldr "按MB大小排序文件" --explain
 tldr [OPTIONS] [PAGE]...
 
 标准选项：
-  -u, --update                    更新缓存
+  -u, --update                    更新缓存（同时刷新生信社区页面）
   -l, --list                      列出当前平台的所有页面
   -a, --list-all                  列出所有页面
   -s, --search <KEYWORD>          搜索包含关键词的页面
   -p, --platform <PLATFORM>       指定平台（linux、osx、windows 等）
   -L, --language <LANGUAGE_CODE>  指定语言
-  -o, --offline                   离线模式，不更新缓存
+  -o, --offline                   不更新缓存（AI 生成仍然可用）
   -R, --raw                       以原始 Markdown 格式输出
   -r, --render <FILE>             渲染指定的 tldr 页面
   -q, --quiet                     静默模式，不显示状态信息
 
 AI 选项：
-  -e, --explain                   解释生成的命令（自然语言模式）
-  -r, --refresh                   刷新 AI 生成的页面（删除缓存并重新生成）
+  -e, --explain                   用 AI 解释命令（首次使用后自动缓存）
+  -r, --refresh                   刷新 AI 页面和解释缓存，重新生成
   -m, --model <MODEL>             覆盖 AI 模型提供者（deepseek、openai、ollama）
-      --init                      初始化 aitldr 配置
-      --ai-status                 显示 aitldr 配置状态
+      --init                      初始化 aitldr 配置（~/.aitldr/config.toml）
+      --ai-status                 显示 aitldr AI 配置状态
 ```
 
 ## AI 功能详解
@@ -138,8 +139,29 @@ AI 选项：
 运行 `tldr <命令>` 时，aitldr 按以下顺序查找：
 
 1. **官方页面** — 在本地 tldr 缓存中搜索命令。
-2. **AI 缓存** — 检查 `~/.aitldr/ai/` 中是否有之前生成的页面。
-3. **AI 生成** — 使用配置的 AI 提供者生成新页面，但仅当命令在系统中存在时（防止幻觉）。离线模式下跳过存在性检查。
+2. **生信社区页面** — 检查 `~/.aitldr/bio-command/` 中的生信工具页面（如 `samtools`、`gatk`、`stringtie`）。
+3. **生信格式页面** — 检查 `~/.aitldr/bio-format/` 中的生信格式页面（如 `bam`、`vcf`、`fasta`）。
+4. **AI 缓存** — 检查 `~/.aitldr/ai/` 中是否有之前生成的页面。
+5. **AI 生成** — 使用配置的 AI 提供者生成新页面，但仅当命令在系统中存在时（防止幻觉）。离线模式下跳过存在性检查。
+
+生信社区页面首次运行时自动从 [bioinformatics-command](https://github.com/11010tianyi/bioinformatics-command) 下载。使用 `--update` 可刷新。
+
+### 离线模式
+
+`--offline` 只跳过缓存更新——**不会**禁用 AI 功能：
+
+- AI 缓存页面仍然显示
+- AI 生成仍然可用（跳过 `command_exists` 检查，允许为本机未安装的命令生成页面）
+- 生信社区页面如果已下载仍可使用
+- 自然语言查询仍然可用
+
+```shell
+# 离线可用：显示缓存或 AI 生成的页面
+tldr --offline stringtie
+
+# 离线可用：自然语言查询 + AI 解释
+tldr --offline "查找大文件" --explain
+```
 
 ### 自然语言模式
 
@@ -184,11 +206,19 @@ explain_default = true
 
 - **页面缓存** — `~/.aitldr/ai/{命令}.md`，用于 AI 生成的 tldr 页面
 - **NL 缓存** — `~/.aitldr/nl/{查询}.txt`，用于自然语言查询结果
+- **解释缓存** — `~/.aitldr/explain/{命令}.txt`，用于 AI 生成的命令解释
+- **生信社区页面** — `~/.aitldr/bio-command/` 和 `~/.aitldr/bio-format/`
 
-使用 `--refresh` 删除特定命令的缓存并重新生成：
+使用 `--refresh` 删除特定命令的页面缓存和解释缓存，然后重新生成：
 
 ```shell
 tldr --refresh tar
+```
+
+使用 `--update` 同时刷新官方 tldr 页面和生信社区页面：
+
+```shell
+tldr --update
 ```
 
 ### 危险命令警告
