@@ -1,64 +1,78 @@
-use std::sync::Mutex;
-use crate::error::{Error, Result};
-use aitldr_ai::{self, AiConfig};
+use crate::error::Result;
+use aitldr_ai::config::load_config;
+use aitldr_ai::generate_page;
 use aitldr_cache as cache_module;
 use aitldr_risk as risk_module;
 
-lazy_static::lazy_static! {
-    static ref AI_CACHE_DIR: Mutex<Option<std::path::PathBuf>> = Mutex::new(None);
+/// Step 2: Check AI cache (equivalent to Python's get_ai_page)
+pub fn check_ai_cache(command: &str) -> Result<Option<String>> {
+    match cache_module::load_page(command) {
+        Ok(Some(content)) => {
+            log::info!("Using cached AI page for '{command}'");
+            Ok(Some(content))
+        }
+        Ok(None) => Ok(None),
+        Err(e) => {
+            log::warn!("Failed to read AI cache: {e}");
+            Ok(None)
+        }
+    }
 }
 
-pub async fn fallback_generate(command: &str) -> Result<Option<String>> {
-    // Check if command exists
-    if !risk_module::command_exists(command) {
-        log::warn!("Command '{}' not found on system, skipping AI generation", command);
+/// Check natural language cache (query → command mapping)
+pub fn check_nl_cache(query: &str) -> Result<Option<String>> {
+    match cache_module::load_nl_page(query) {
+        Ok(Some(command)) => {
+            log::info!("Using cached NL result for '{query}'");
+            Ok(Some(command))
+        }
+        Ok(None) => Ok(None),
+        Err(e) => {
+            log::warn!("Failed to read NL cache: {e}");
+            Ok(None)
+        }
+    }
+}
+
+/// Save natural language query → command mapping to cache
+pub fn save_nl_cache(query: &str, command: &str) {
+    if let Err(e) = cache_module::save_nl_page(query, command) {
+        log::warn!("Failed to save NL cache: {e}");
+    }
+}
+
+/// Delete AI cache for --refresh
+pub fn delete_ai_cache(command: &str) {
+    if let Err(e) = cache_module::delete_page(command) {
+        log::warn!("Failed to delete AI cache: {e}");
+    }
+}
+
+/// Step 3: AI generation with command_exists check (equivalent to Python's generate_page)
+/// - Online mode: check command_exists first (prevent hallucination)
+/// - Offline mode: skip command_exists check (allow forced generation)
+pub async fn fallback_generate(command: &str, offline: bool) -> Result<Option<String>> {
+    // In online mode, check command existence to prevent AI hallucination
+    if !offline && !risk_module::command_exists(command) {
+        log::warn!(
+            "Command '{command}' not found on system, skipping AI generation"
+        );
         return Ok(None);
     }
 
-    // Check cache
-    if let Some(cached) = check_cache(command)? {
-        log::info!("Using cached AI page for '{}'", command);
-        return Ok(Some(cached));
-    }
+    log::info!("Generating AI page for '{command}'");
+    let config = load_config();
 
-    // Generate with AI
-    log::info!("Generating AI page for '{}'", command);
-    let config = aitldr_ai::config::load_config();
-
-    match aitldr_ai::generate_page(command, &config).await {
+    match generate_page(command, &config).await {
         Ok(content) => {
-            // Save to cache
-            if let Err(e) = save_cache(command, &content) {
-                log::warn!("Failed to cache AI page: {}", e);
+            if let Err(e) = cache_module::save_page(command, &content) {
+                log::warn!("Failed to cache AI page: {e}");
             }
             Ok(Some(content))
         }
         Err(e) => {
-            log::error!("AI generation failed: {}", e);
+            log::error!("AI generation failed: {e}");
             Ok(None)
         }
-    }
-}
-
-fn check_cache(command: &str) -> Result<Option<String>> {
-    match cache_module::load_page(command) {
-        Ok(Some(content)) => Ok(Some(content)),
-        Ok(None) => Ok(None),
-        Err(e) => {
-            log::warn!("Failed to read cache: {}", e);
-            Ok(None)
-        }
-    }
-}
-
-fn save_cache(command: &str, content: &str) -> std::result::Result<(), Box<dyn std::error::Error>> {
-    cache_module::save_page(command, content)?;
-    Ok(())
-}
-
-pub fn init_ai_cache_dir() {
-    let mut dir = AI_CACHE_DIR.lock().unwrap();
-    if dir.is_none() {
-        *dir = Some(cache_module::get_ai_cache_dir().ok());
     }
 }

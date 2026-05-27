@@ -2,7 +2,7 @@
 
 # tlrc
 
-A [tldr](https://github.com/tldr-pages/tldr) client written in Rust.
+A [tldr](https://github.com/tldr-pages/tldr) client written in Rust, with AI-powered page generation.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/tldr-pages/tlrc/ci.yml?label=CI&logo=github&labelColor=363a4f&logoColor=d9e0ee)](https://github.com/tldr-pages/tlrc/actions/workflows/ci.yml)
 [![release](https://img.shields.io/github/v/release/tldr-pages/tlrc?&logo=github&color=cba6f7&logoColor=d9e0ee&labelColor=363a4f)][latest-release]
@@ -16,11 +16,32 @@ A [tldr](https://github.com/tldr-pages/tldr) client written in Rust.
 
 </div>
 
+## What's New in aitldr
+
+aitldr extends the official tlrc with AI-powered features:
+
+- **AI Page Generation** — When a tldr page doesn't exist in the official repository, aitldr generates one using AI (DeepSeek, OpenAI, or Ollama).
+- **Natural Language Queries** — Ask questions in plain language (including Chinese) and get the corresponding shell command.
+- **Smart Caching** — AI-generated pages and natural language results are cached locally to avoid wasting tokens.
+- **Destructive Command Warnings** — Flags potentially dangerous commands (e.g., `rm -rf`).
+- **Command Explanation** — Get AI-generated explanations for any command with `--explain`.
+- **Offline AI Support** — AI generation and cached pages work in offline mode (skips command existence check).
+
 ## Installation
 
 <a href="https://repology.org/project/tlrc/versions">
     <img src="https://repology.org/badge/vertical-allrepos/tlrc.svg?exclude_unsupported=1" alt="Packaging status" align="right">
 </a>
+
+### Build from Source
+
+```shell
+git clone https://github.com/your-repo/aitldr-cli.git
+cd aitldr-cli/tlrc
+cargo build --release
+```
+
+The binary will be at `target/release/tldr`.
 
 ### Linux/macOS using Homebrew
 
@@ -30,86 +51,256 @@ Install [tlrc](https://formulae.brew.sh/formula/tlrc) with Homebrew:
 brew install tlrc
 ```
 
-### Linux/macOS using Nix
-
-Install [tlrc](https://search.nixos.org/packages?channel=unstable&show=tlrc) from nixpkgs.
-
-### Arch Linux
-
-Install [tlrc](https://aur.archlinux.org/packages/tlrc) (from source) or [tlrc-bin](https://aur.archlinux.org/packages/tlrc-bin) (prebuilt) from the AUR.
-
-### Void Linux
-
-Install [tlrc](https://voidlinux.org/packages/?q=tlrc) with XBPS:
-
-```shell
-xbps-install tlrc
-```
-
-### openSUSE
-
-Install [tlrc](https://software.opensuse.org/package/tlrc) with Zypper:
-
-```shell
-zypper install tlrc
-```
-
-### Windows using Winget
-
-Install [tlrc](https://github.com/microsoft/winget-pkgs/tree/master/manifests/t/tldr-pages/tlrc) with Winget:
-
-```shell
-winget install tldr-pages.tlrc
-```
-
-### Windows using Scoop
-
-Install [tlrc](https://scoop.sh/#/apps?q=tlrc&id=67f36cdb01b1573ed454af11605b7b8efc732dc7) with Scoop:
-
-```shell
-scoop install tlrc
-```
-
-### macOS using MacPorts
-
-Install [tlrc](https://ports.macports.org/port/tlrc/details) with MacPorts:
-
-```shell
-port install tlrc
-```
-
-### NetBSD
-
-Install [tlrc](https://ftp.netbsd.org/pub/NetBSD/NetBSD-current/pkgsrc/net/tlrc/index.html) with `pkgin`:
-
-```shell
-pkgin install tlrc
-```
+> **Note:** The Homebrew version does not include AI features. Build from source for the full aitldr experience.
 
 ### From crates.io
-
-To build [tlrc][crate] from a source tarball, run:
 
 ```shell
 cargo install tlrc --locked
 ```
 
-> [!NOTE]
-> Shell completion files and the man page will not be installed that way.
+> **Note:** This installs the official tlrc without AI features.
 
 ### From GitHub Releases
 
 You can find prebuilt binaries and Debian packages [here][latest-release].
 
-## Usage
+## Quick Start
 
-See `man tldr` or the [online manpage](https://tldr.sh/tlrc). For a brief description, you can also run:
+1. **Initialize configuration:**
 
 ```shell
-tldr --help
+tldr --init
 ```
 
-## Configuration
+This creates `~/.aitldr/config.toml`. Edit it to set your API key:
+
+```toml
+[deepseek]
+api_key = "your-api-key-here"
+
+# Or use an environment variable:
+# api_key = "env:DEEPSEEK_API_KEY"
+```
+
+2. **View a command page:**
+
+```shell
+tldr tar
+```
+
+If the page exists in the official repository, it shows the official version. If not, aitldr generates one with AI.
+
+3. **Ask in natural language:**
+
+```shell
+tldr "how to find large files"
+tldr "查找大文件"
+tldr "按文件大小排序"
+```
+
+4. **Explain a command:**
+
+```shell
+tldr --explain "how to find large files"
+tldr "按MB大小排序文件" --explain
+```
+
+## Usage
+
+```
+tldr [OPTIONS] [PAGE]...
+
+Standard options:
+  -u, --update                    Update the cache
+  -l, --list                      List all pages in the current platform
+  -a, --list-all                  List all pages
+  -s, --search <KEYWORD>          Search for pages containing a keyword
+  -p, --platform <PLATFORM>       Specify the platform (linux, osx, windows, etc.)
+  -L, --language <LANGUAGE_CODE>  Specify the languages to use
+  -o, --offline                   Do not update the cache, even if it is stale
+  -R, --raw                       Print pages in raw Markdown
+  -r, --render <FILE>             Render the specified tldr page
+  -q, --quiet                     Suppress status messages and warnings
+
+AI options:
+  -e, --explain                   Explain the generated command (natural language mode)
+  -r, --refresh                   Refresh AI-generated page (delete cache and regenerate)
+  -m, --model <MODEL>             Override AI model provider (deepseek, openai, ollama)
+      --init                      Initialize aitldr configuration
+      --ai-status                 Show aitldr configuration status
+```
+
+## AI Features in Detail
+
+### Page Lookup Flow
+
+When you run `tldr <command>`, aitldr follows this lookup order:
+
+1. **Official page** — Search the local tldr cache for the command.
+2. **AI cache** — Check `~/.aitldr/ai/` for a previously generated page.
+3. **AI generation** — Generate a new page using the configured AI provider, but only if the command exists on the system (prevents hallucination). In offline mode, the existence check is skipped.
+
+### Natural Language Mode
+
+When your query contains Chinese characters, more than 3 words, or natural language patterns (e.g., "how to", "find", "show"), aitldr switches to natural language mode:
+
+1. **NL cache** — Check `~/.aitldr/nl/` for a cached result.
+2. **AI generation** — Generate the corresponding shell command using AI.
+3. **Destructive warning** — If the command is potentially dangerous, a warning is displayed.
+
+Examples:
+
+```shell
+# English queries
+tldr "how to find large files"
+tldr "create a new directory"
+tldr "search for text in files"
+
+# Chinese queries
+tldr "查找大文件"
+tldr "按MB大小排序文件"
+tldr "删除所有临时文件"
+```
+
+### Command Explanation
+
+Add `--explain` to get an AI-generated explanation of the command:
+
+```shell
+tldr "sort files by size" --explain
+```
+
+You can also enable explanations by default in the config:
+
+```toml
+[general]
+explain_default = true
+```
+
+### AI Caching
+
+All AI-generated content is cached locally to avoid redundant API calls:
+
+- **Page cache** — `~/.aitldr/ai/{command}.md` for AI-generated tldr pages
+- **NL cache** — `~/.aitldr/nl/{query}.txt` for natural language query results
+
+Use `--refresh` to delete the cache for a specific command and regenerate it:
+
+```shell
+tldr --refresh tar
+```
+
+### Destructive Command Warnings
+
+aitldr detects potentially dangerous commands and displays a warning:
+
+```
+tldr "删除所有文件"
+
+rm -rf /path/to/dir
+
+WARNING: Destructive command! This operation may cause irreversible data loss.
+```
+
+## AI Configuration
+
+The configuration file is at `~/.aitldr/config.toml`. Generate it with `tldr --init`.
+
+```toml
+[general]
+# Explain commands by default when using natural language mode
+explain_default = false
+# Enable AI result caching (recommended)
+cache_enabled = true
+# Output language: "en" for English, "zh" for Chinese
+language = "zh"
+
+[model]
+# AI provider: "deepseek", "openai", or "ollama"
+provider = "deepseek"
+# Model name (varies by provider)
+model = "deepseek-chat"
+
+[deepseek]
+# API key (or use env:DEEPSEEK_API_KEY for environment variable)
+api_key = "env:DEEPSEEK_API_KEY"
+
+[openai]
+# API key (or use env:OPENAI_API_KEY for environment variable)
+api_key = "env:OPENAI_API_KEY"
+
+[ollama]
+# Ollama server endpoint
+endpoint = "http://localhost:11434"
+# Model to use with Ollama
+model = "qwen2:7b"
+```
+
+### Checking Configuration
+
+View your current configuration:
+
+```shell
+tldr --ai-status
+```
+
+Example output:
+
+```
+aitldr Configuration
+
+  General:
+    Explain default: false
+    Cache enabled:   true
+    Language:        zh
+
+  Model:
+    Provider: deepseek
+    Model:    deepseek-chat
+
+  DeepSeek:
+    API Key: ********************
+
+  OpenAI:
+    API Key: Not configured
+
+  Ollama:
+    Endpoint: http://localhost:11434
+    Model:    qwen2:7b
+
+  Config directory: /home/user/.aitldr
+```
+
+### Environment Variables
+
+You can reference environment variables in the config using the `env:` prefix:
+
+```toml
+[deepseek]
+api_key = "env:DEEPSEEK_API_KEY"
+
+[openai]
+api_key = "env:OPENAI_API_KEY"
+```
+
+Then set the environment variable:
+
+```shell
+export DEEPSEEK_API_KEY="sk-..."
+```
+
+### Supported Providers
+
+| Provider | Page Generation | Natural Language | Explanation | API Key Required |
+|----------|----------------|------------------|-------------|-----------------|
+| DeepSeek | Yes | Yes | Yes | Yes |
+| OpenAI | Stub | Stub | Stub | Yes |
+| Ollama | Yes | No | No | No |
+
+> **Note:** OpenAI and Ollama natural language/explanation support are planned. Use DeepSeek for the full feature set.
+
+## Standard tlrc Configuration
 
 Tlrc can be customized with a [TOML](https://toml.io) configuration file. To get the default path for your system, run:
 
@@ -123,8 +314,6 @@ To generate a default config file, run:
 tldr --gen-config > "$(tldr --config-path)"
 ```
 
-or copy the below example.
-
 ### Configuration options
 
 ```toml
@@ -132,67 +321,33 @@ or copy the below example.
 # Override the cache directory ('~' will be expanded to your home directory).
 dir = "/path/to/cache"
 # Override the base URL used for downloading tldr pages.
-# The mirror must provide files with the same names as the official tldr pages repository:
-# mirror/tldr.sha256sums            must point to the SHA256 checksums of all assets
-# mirror/tldr-pages.LANGUAGE.zip    must point to a zip archive that contains platform directories with pages in LANGUAGE
 mirror = "https://github.com/tldr-pages/tldr/releases/latest/download"
 # Automatically update the cache if it's older than max_age hours.
 auto_update = true
-# Perform the automatic update after the page is shown (the default is to update first, then show the page).
+# Perform the automatic update after the page is shown.
 defer_auto_update = false
-max_age = 336 # 336 hours = 2 weeks
-# Specify a list of desired page languages. If it's empty, languages specified in
-# the LANG and LANGUAGE environment variables are downloaded.
-# English is implied and will always be downloaded.
-# You can see a list of language codes here: https://github.com/tldr-pages/tldr
-# Example: ["de", "pl"]
+max_age = 336
+# Specify a list of desired page languages.
 languages = []
 
 [output]
-# Show the title in the rendered page.
 show_title = true
-# Show the platform name ('common', 'linux', etc.) in the title.
 platform_title = false
-# Prefix descriptions of examples with hyphens.
 show_hyphens = false
-# Display a link to edit the shown page on GitHub.
 edit_link = false
-# Use a custom string instead of a hyphen.
 example_prefix = "- "
-# Set the max line length. 0 means to use the terminal width.
-# If a description is longer than this value, it will be split
-# into multiple lines.
 line_length = 0
-# Strip empty lines from output.
 compact = false
-# In option placeholders, show the specified option style.
-# Example: {{[-s|--long]}}
-# short  : -s
-# long   : --long
-# both   : [-s|--long]
 option_style = "long"
-# Print pages in raw markdown.
 raw_markdown = false
 
-# Number of spaces to put before each line of the page.
 [indent]
-# Command name.
 title = 2
-# Command description.
 description = 2
-# Descriptions of examples.
 bullet = 2
-# Example command invocations.
 example = 4
 
-# Style for the title of the page (command name).
 [style.title]
-# Fixed colors:       "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white", "default",
-#                     "bright_black", "bright_red", "bright_green", "bright_yellow", "bright_blue",
-#                     "bright_magenta", "bright_cyan", "bright_white"
-# 256color ANSI code: { color256 = 50 }
-# RGB:                { rgb = [0, 255, 255] }
-# Hex:                { hex = "#ffffff" }
 color = "magenta"
 background = "default"
 bold = true
@@ -201,7 +356,6 @@ italic = false
 dim = false
 strikethrough = false
 
-# Style for the description of the page.
 [style.description]
 color = "magenta"
 background = "default"
@@ -211,7 +365,6 @@ italic = false
 dim = false
 strikethrough = false
 
-# Style for descriptions of examples.
 [style.bullet]
 color = "green"
 background = "default"
@@ -221,7 +374,6 @@ italic = false
 dim = false
 strikethrough = false
 
-# Style for command examples.
 [style.example]
 color = "cyan"
 background = "default"
@@ -231,7 +383,6 @@ italic = false
 dim = false
 strikethrough = false
 
-# Style for URLs inside the description.
 [style.url]
 color = "red"
 background = "default"
@@ -241,7 +392,6 @@ italic = true
 dim = false
 strikethrough = false
 
-# Style for text surrounded by backticks (`).
 [style.inline_code]
 color = "yellow"
 background = "default"
@@ -251,7 +401,6 @@ italic = true
 dim = false
 strikethrough = false
 
-# Style for placeholders inside command examples.
 [style.placeholder]
 color = "red"
 background = "default"

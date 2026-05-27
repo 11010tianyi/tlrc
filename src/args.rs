@@ -132,4 +132,24 @@ pub struct Cli {
     /// Print version.
     #[arg(short, long, action = ArgAction::Version)]
     version: (),
+
+    /// Explain the generated command (used with natural language queries).
+    #[arg(short, long)]
+    pub explain: bool,
+
+    /// Refresh AI-generated page (delete cache and regenerate).
+    #[arg(short, long)]
+    pub refresh: bool,
+
+    /// Override AI model provider for this invocation (deepseek, openai, ollama).
+    #[arg(short, long)]
+    pub model: Option<String>,
+
+    /// Initialize aitldr configuration.
+    #[arg(long, group = "operations")]
+    pub init: bool,
+
+    /// Show aitldr configuration status.
+    #[arg(long, group = "operations")]
+    pub ai_status: bool,
 }

@@ -1,11 +1,10 @@
+mod ai;
 mod args;
 mod cache;
 mod config;
 mod error;
 mod output;
 mod util;
-mod ai;
-mod ai;
 
 use std::process::ExitCode;
 
@@ -13,15 +12,14 @@ use clap::Parser;
 use log::{info, warn};
 use yansi::Paint;
 
+use crate::ai::fallback_generate;
 use crate::args::Cli;
 use crate::cache::Cache;
 use crate::config::{Config, OptionStyle, OutputMode};
 use crate::error::{Error, Result};
 use crate::output::PageRenderer;
 use crate::util::{Logger, init_color};
-use crate::ai::fallback_generate;
-use crate::ai::fallback_generate;
-use tokio;
+use aitldr_risk::is_natural_language;
 
 const DEFAULT_PLATFORM: &str = if cfg!(target_os = "linux") {
     "linux"
@@ -41,12 +39,13 @@ const DEFAULT_PLATFORM: &str = if cfg!(target_os = "linux") {
     "common"
 };
 
-async async fn main() -> ExitCode {
+fn main() -> ExitCode {
     let cli = Cli::parse();
     init_color(cli.color);
     Logger::init(cli.quiet, cli.verbose);
 
-    match tokio::runtime::Runtime::new().unwrap().block_on(run(cli)) {
+    let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+    match rt.block_on(run(cli)) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => e.exit_code(),
     }
@@ -88,7 +87,74 @@ fn include_cli_in_config(cfg: &mut Config, cli: &Cli) {
     }
 }
 
+/// Handle `--init`: create ~/.aitldr/config.toml with defaults
+fn handle_init() -> Result<()> {
+    let config_path = aitldr_ai::config::get_config_dir().join("config.toml");
+    if config_path.exists() {
+        println!("{} Configuration already exists at {}", "!".yellow().bold(), config_path.display());
+        println!("Edit it directly, or delete it first if you want to reset.");
+        return Ok(());
+    }
+    let cfg = aitldr_ai::config::AiConfig::default();
+    aitldr_ai::config::save_config(&cfg)
+        .map_err(|e| Error::new(format!("Failed to save config: {e}")))?;
+    let config_dir = aitldr_ai::config::get_config_dir();
+    println!("{} Configuration initialized at {}", "✓".green().bold(), config_dir.display());
+    println!("\nEdit config.toml to set your API keys and preferences.");
+    Ok(())
+}
+
+/// Handle `--ai-status`: show current AI configuration
+fn handle_ai_status() -> Result<()> {
+    let cfg = aitldr_ai::config::load_config();
+    let config_dir = aitldr_ai::config::get_config_dir();
+
+    let ds_key_status = if cfg.deepseek_key.is_some() {
+        "********************".green().to_string()
+    } else {
+        "Not configured".red().to_string()
+    };
+    let oai_key_status = if cfg.openai_key.is_some() {
+        "********************".green().to_string()
+    } else {
+        "Not configured".red().to_string()
+    };
+
+    println!("{}", "aitldr Configuration".bold());
+    println!();
+    println!("  {}:", "General".bold());
+    println!("    Explain default: {}", cfg.explain_default);
+    println!("    Cache enabled:   {}", cfg.cache_enabled);
+    println!("    Language:        {}", cfg.language);
+    println!();
+    println!("  {}:", "Model".bold());
+    println!("    Provider: {}", cfg.provider);
+    println!("    Model:    {}", cfg.model);
+    println!();
+    println!("  {}:", "DeepSeek".bold());
+    println!("    API Key: {ds_key_status}");
+    println!();
+    println!("  {}:", "OpenAI".bold());
+    println!("    API Key: {oai_key_status}");
+    println!();
+    println!("  {}:", "Ollama".bold());
+    println!("    Endpoint: {}", cfg.ollama_endpoint);
+    println!("    Model:    {}", cfg.ollama_model);
+    println!();
+    println!("  Config directory: {}", config_dir.display());
+
+    Ok(())
+}
+
 async fn run(cli: Cli) -> Result<()> {
+    // Handle AI-specific commands first
+    if cli.init {
+        return handle_init();
+    }
+    if cli.ai_status {
+        return handle_ai_status();
+    }
+
     if cli.config_path {
         return Config::print_path();
     }
@@ -174,7 +240,67 @@ async fn run(cli: Cli) -> Result<()> {
     } else if cli.list_languages {
         cache.list_languages()?;
     } else {
+        let raw_query = cli.page.join(" ");
         let page_name = cli.page.join("-").to_lowercase();
+
+        // Load AI config and apply --model override
+        let mut ai_config = aitldr_ai::config::load_config();
+        if let Some(ref model) = cli.model {
+            ai_config.provider = model.clone();
+        }
+        // Apply explain_default from config if --explain not explicitly set
+        let explain = cli.explain || ai_config.explain_default;
+
+        // Natural language mode: detect Chinese or natural language patterns
+        if is_natural_language(&raw_query) {
+            info!("Detected natural language query, generating command...");
+            // Check NL cache first
+            if let Some(cached_cmd) = crate::ai::check_nl_cache(&raw_query)? {
+                println!("{}", cached_cmd.bold());
+                if explain {
+                    match aitldr_ai::generate_command_explanation(&cached_cmd, &ai_config).await {
+                        Ok(explanation) => println!("\n{explanation}"),
+                        Err(e) => warn!("Failed to generate explanation: {e}"),
+                    }
+                }
+                if aitldr_risk::is_destructive(&cached_cmd) {
+                    eprintln!("\n{} {}", "WARNING:".yellow().bold(), "Destructive command! This operation may cause irreversible data loss.".yellow());
+                }
+                return Ok(());
+            }
+
+            match aitldr_ai::generate_command_from_natural_language(&raw_query, &ai_config).await {
+                Ok(command) if !command.is_empty() => {
+                    // Save to NL cache
+                    crate::ai::save_nl_cache(&raw_query, &command);
+                    println!("{}", command.bold());
+                    if explain {
+                        match aitldr_ai::generate_command_explanation(&command, &ai_config).await {
+                            Ok(explanation) => println!("\n{explanation}"),
+                            Err(e) => warn!("Failed to generate explanation: {e}"),
+                        }
+                    }
+                    if aitldr_risk::is_destructive(&command) {
+                        eprintln!("\n{} {}", "WARNING:".yellow().bold(), "Destructive command! This operation may cause irreversible data loss.".yellow());
+                    }
+                    return Ok(());
+                }
+                Ok(_) => {
+                    warn!("AI could not generate a command for this query");
+                }
+                Err(e) => {
+                    warn!("Natural language command generation failed: {e}");
+                }
+            }
+            return Err(Error::new("could not generate a command from the given query."));
+        }
+
+        // --refresh: delete AI cache and regenerate
+        if cli.refresh {
+            crate::ai::delete_ai_cache(&page_name);
+            info!("Refreshing AI page for '{page_name}'...");
+        }
+
         let mut page_paths = cache.find(&page_name, &languages, platform)?;
 
         if update_later && page_paths.is_empty() {
@@ -189,14 +315,31 @@ async fn run(cli: Cli) -> Result<()> {
         }
 
         if page_paths.is_empty() {
-            // Try AI fallback if not offline
-            if !cli.offline {
-                info!("Page not found, trying AI generation...");
-                if let Some(ai_content) = fallback_generate(&page_name).await.map_err(|e| Error::new(&format!("AI error: {}", e)))? {
-                    let temp_path = std::env::temp_dir().join(format!("tldr_ai_{}.md", page_name));
+            // Step 2: Check AI cache (same as Python: get_ai_page)
+            if let Some(cached) = crate::ai::check_ai_cache(&page_name)? {
+                eprintln!("{}", "[AI Generated Page (cached)]".dim());
+                let temp_path =
+                    std::env::temp_dir().join(format!("tldr_ai_{page_name}.md"));
+                std::fs::write(&temp_path, cached)?;
+                PageRenderer::print_cache_result(&[temp_path], &cfg)?;
+                eprintln!("{}", "\nAI-generated pages may contain inaccuracies. Verify before use.".dim());
+                return Ok(());
+            }
+
+            // Step 3: AI generation (command_exists check happens inside, matching Python)
+            match fallback_generate(&page_name, cli.offline).await {
+                Ok(Some(ai_content)) => {
+                    eprintln!("{}", "[AI Generated Page]".dim());
+                    let temp_path =
+                        std::env::temp_dir().join(format!("tldr_ai_{page_name}.md"));
                     std::fs::write(&temp_path, ai_content)?;
                     PageRenderer::print_cache_result(&[temp_path], &cfg)?;
+                    eprintln!("{}", "\nAI-generated pages may contain inaccuracies. Verify before use.".dim());
                     return Ok(());
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    warn!("AI generation failed: {:?}", e);
                 }
             }
 
